@@ -64,7 +64,7 @@ export default function Header() {
             setSearchLoading(true);
             try {
                 const res = await fetch(
-                    `http://localhost:8000/candidatos/busca?ano=${ano}&nome=${encodeURIComponent(val)}`
+                    `${API_URL}/candidatos/busca?ano=${ano}&nome=${encodeURIComponent(val)}`
                 );
                 const data = await res.json();
                 setSearchResults(data);
