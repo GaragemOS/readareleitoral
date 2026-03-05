@@ -1,59 +1,22 @@
 
-
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 import duckdb
-
 app = FastAPI()
 
 
 
 
-
-
-# ── Todos Endpoints Disponíveis  ──────────────────────────────────────────────────────────
-
-# GET cargos
-# /debug/cargos?ano=2022
-
-# GET lista de candidatos
-# /candidatos/lista?ano=2022&cargo=DEPUTADO FEDERAL
-# /candidatos/lista?ano=2022&cargo=GOVERNADOR&uf=BA
-# /candidatos/lista?ano=2018&cargo=SENADOR
-
-# GET busca candidato (todos os cargos)
-# /candidatos/busca?ano=2022&nome=joao
-# /candidatos/busca?ano=2022&nome=silva&uf=BA
-
-# GET /candidato
-# /candidato?ano=2022&numero=6522&cargo=DEPUTADO FEDERAL
-# /candidato?ano=2022&numero=13&cargo=GOVERNADOR&uf=BA
-# /candidato?ano=2018&numero=4015&cargo=DEPUTADO ESTADUAL
-
-# GET /candidato/municipios
-# /candidato/municipios?ano=2022&numero=6522&cargo=DEPUTADO FEDERAL
-# /candidato/municipios?ano=2022&numero=13&cargo=GOVERNADOR&uf=BA
-
-# GET /candidato/secoes
-# /candidato/secoes?ano=2022&numero=6522&cargo=DEPUTADO FEDERAL&municipio=SALVADOR
-# /candidato/secoes?ano=2022&numero=13&cargo=GOVERNADOR&municipio=FEIRA DE SANTANA
-
-# GET /candidato/completo
-# /candidato/completo?ano=2022&numero=6522&cargo=DEPUTADO FEDERAL
-# /candidato/completo?ano=2022&numero=13&cargo=GOVERNADOR&uf=BA
-# /candidato/completo?ano=2018&numero=4015&cargo=DEPUTADO ESTADUAL
-
-# GET /municipio/candidatos
-# /municipio/candidatos?ano=2022&municipio=SALVADOR&cargo=DEPUTADO FEDERAL
-# /municipio/candidatos?ano=2022&municipio=FEIRA DE SANTANA&cargo=GOVERNADOR
-# /municipio/candidatos?ano=2018&municipio=VITORIA DA CONQUISTA&cargo=SENADOR
-
-
 # ── Arquivos Parquet ──────────────────────────────────────────────────────────
+def conn():
+    c = duckdb.connect()
+    c.execute("INSTALL httpfs; LOAD httpfs;")
+    return c
+
 parquet_files = {
-    2018: "eleicoes_ba_2018_1turno.parquet",
-    2022: "eleicoes_ba_2022_1turno.parquet",
+    2018: "https://suthuhautxmskhdwcdvv.supabase.co/storage/v1/object/public/eleicoes/eleicoes_ba_2018_1turno.parquet",
+    2022: "https://suthuhautxmskhdwcdvv.supabase.co/storage/v1/object/public/eleicoes/eleicoes_ba_2022_1turno.parquet",
 }
 
 def get_parquet(ano: int) -> str:
@@ -62,8 +25,6 @@ def get_parquet(ano: int) -> str:
         raise HTTPException(status_code=400, detail=f"Ano inválido: {ano}. Use {list(parquet_files.keys())}.")
     return path
 
-def conn():
-    return duckdb.connect()
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
 app.add_middleware(
@@ -312,3 +273,43 @@ def candidatos_por_municipio(ano: int, municipio: str, cargo: str):
         GROUP BY NR_VOTAVEL, NM_VOTAVEL
         ORDER BY total_votos DESC
     """, params)
+
+
+
+
+# ── Todos Endpoints Disponíveis  ──────────────────────────────────────────────────────────
+
+# GET cargos
+# /debug/cargos?ano=2022
+
+# GET lista de candidatos
+# /candidatos/lista?ano=2022&cargo=DEPUTADO FEDERAL
+# /candidatos/lista?ano=2022&cargo=GOVERNADOR&uf=BA
+# /candidatos/lista?ano=2018&cargo=SENADOR
+
+# GET busca candidato (todos os cargos)
+# /candidatos/busca?ano=2022&nome=joao
+# /candidatos/busca?ano=2022&nome=silva&uf=BA
+
+# GET /candidato
+# /candidato?ano=2022&numero=6522&cargo=DEPUTADO FEDERAL
+# /candidato?ano=2022&numero=13&cargo=GOVERNADOR&uf=BA
+# /candidato?ano=2018&numero=4015&cargo=DEPUTADO ESTADUAL
+
+# GET /candidato/municipios
+# /candidato/municipios?ano=2022&numero=6522&cargo=DEPUTADO FEDERAL
+# /candidato/municipios?ano=2022&numero=13&cargo=GOVERNADOR&uf=BA
+
+# GET /candidato/secoes
+# /candidato/secoes?ano=2022&numero=6522&cargo=DEPUTADO FEDERAL&municipio=SALVADOR
+# /candidato/secoes?ano=2022&numero=13&cargo=GOVERNADOR&municipio=FEIRA DE SANTANA
+
+# GET /candidato/completo
+# /candidato/completo?ano=2022&numero=6522&cargo=DEPUTADO FEDERAL
+# /candidato/completo?ano=2022&numero=13&cargo=GOVERNADOR&uf=BA
+# /candidato/completo?ano=2018&numero=4015&cargo=DEPUTADO ESTADUAL
+
+# GET /municipio/candidatos
+# /municipio/candidatos?ano=2022&municipio=SALVADOR&cargo=DEPUTADO FEDERAL
+# /municipio/candidatos?ano=2022&municipio=FEIRA DE SANTANA&cargo=GOVERNADOR
+# /municipio/candidatos?ano=2018&municipio=VITORIA DA CONQUISTA&cargo=SENADOR
