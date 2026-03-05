@@ -1,4 +1,4 @@
-:{$PORT} {
+:8000 {
     root * /app/dist
     file_server
     try_files {path} /index.html
