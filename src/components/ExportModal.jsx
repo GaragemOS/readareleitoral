@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_URL = import.meta.env.API_URL || 'http://localhost:8000';
 const ANOS_DISPONIVEIS = [2018, 2022];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
