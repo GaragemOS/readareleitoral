@@ -1,11 +1,8 @@
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import create_engine, text
 from typing import Optional
-import pandas as pd
 import duckdb
-import os
 app = FastAPI()
 
 
