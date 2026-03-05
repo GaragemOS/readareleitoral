@@ -5,3 +5,4 @@ uvicorn
 duckdb
 python-dotenv
 psycopg2-binary
+sql-alchemy
