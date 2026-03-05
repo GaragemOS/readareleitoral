@@ -4,3 +4,4 @@ fastapi
 uvicorn
 duckdb
 python-dotenv
+psycopg2-binary

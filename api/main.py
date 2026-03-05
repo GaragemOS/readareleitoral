@@ -1,9 +1,13 @@
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import create_engine, text
 from typing import Optional
+import pandas as pd
 import duckdb
-
+import os
 app = FastAPI()
+
 
 
 
@@ -18,12 +22,7 @@ app = FastAPI()
 # /candidatos/lista?ano=2022&cargo=GOVERNADOR&uf=BA
 # /candidatos/lista?ano=2018&cargo=SENADOR
 
-# get busca candidato (todos os cargos)
-# /candidato?ano=2022&numero=6522&cargo=DEPUTADO FEDERAL
-# /candidato?ano=2022&numero=13&cargo=GOVERNADOR&uf=BA
-# /candidato?ano=2018&numero=4015&cargo=DEPUTADO ESTADUAL
-
-# GET /candidatos/busca
+# GET busca candidato (todos os cargos)
 # /candidatos/busca?ano=2022&nome=joao
 # /candidatos/busca?ano=2022&nome=silva&uf=BA
 
@@ -51,13 +50,10 @@ app = FastAPI()
 # /municipio/candidatos?ano=2018&municipio=VITORIA DA CONQUISTA&cargo=SENADOR
 
 
-
-
 # ── Arquivos Parquet ──────────────────────────────────────────────────────────
-
 parquet_files = {
-    2018: "s3://radar-eleitoral/eleicoes_ba_2018_1turno.parquet",
-    2022: "s3://radar-eleitoral/eleicoes_ba_2022_1turno.parquet",
+    2018: "eleicoes_ba_2018_1turno.parquet",
+    2022: "eleicoes_ba_2022_1turno.parquet",
 }
 
 def get_parquet(ano: int) -> str:
@@ -107,7 +103,6 @@ def build_where(**kwargs) -> tuple[str, dict]:
     return where, params
 
 def run(sql: str, params: dict = {}):
-    """Executa query e retorna lista de dicts."""
     with conn() as c:
         rel = c.execute(sql, params) if params else c.execute(sql)
         cols = [d[0] for d in rel.description]
@@ -123,26 +118,10 @@ def run_one(sql: str, params: dict = {}):
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ENDPOINTS
-#
-#   GET /debug/cargos               → lista cargos disponíveis no ano
-#   GET /candidatos/lista           → lista candidatos por cargo (e opcionalmente UF)
-#   GET /candidatos/busca           → busca candidatos por nome
-#   GET /candidato                  → dados gerais de um candidato + votos por município
-#   GET /candidato/municipios       → votos de um candidato agrupados por município
-#   GET /candidato/secoes           → votos de um candidato por seção eleitoral
-#   GET /candidato/completo         → dados completos: meta, totais, municípios, zonas, seções
-#   GET /municipio/candidatos       → todos os candidatos de um município e cargo
 # ─────────────────────────────────────────────────────────────────────────────
-
 
 @app.get("/debug/cargos")
 def listar_cargos(ano: int):
-    """
-    Lista todos os cargos disponíveis no arquivo do ano informado.
-
-    Parâmetros:
-      - ano (int): 2018 ou 2022
-    """
     f = get_parquet(ano)
     rows = run(f"SELECT DISTINCT DS_CARGO_PERGUNTA FROM read_parquet('{f}') ORDER BY DS_CARGO_PERGUNTA")
     return [r["DS_CARGO_PERGUNTA"] for r in rows]
@@ -150,14 +129,6 @@ def listar_cargos(ano: int):
 
 @app.get("/candidatos/lista")
 def listar_candidatos(ano: int, cargo: str, uf: Optional[str] = None):
-    """
-    Lista todos os candidatos de um cargo, ordenados por total de votos.
-
-    Parâmetros:
-      - ano   (int): 2018 ou 2022
-      - cargo (str): ex. "GOVERNADOR", "DEPUTADO ESTADUAL"
-      - uf    (str, opcional): sigla do estado, ex. "BA"
-    """
     f = get_parquet(ano)
     where, params = build_where(cargo=cargo, uf=uf)
 
@@ -176,14 +147,6 @@ def listar_candidatos(ano: int, cargo: str, uf: Optional[str] = None):
 
 @app.get("/candidatos/busca")
 def buscar_candidatos(ano: int, nome: str, uf: Optional[str] = None):
-    """
-    Busca candidatos pelo nome (parcial, case-insensitive). Retorna até 20 resultados.
-
-    Parâmetros:
-      - ano  (int): 2018 ou 2022
-      - nome (str): trecho do nome, ex. "lula"
-      - uf   (str, opcional): sigla do estado
-    """
     f = get_parquet(ano)
     where, params = build_where(nome=nome, uf=uf)
 
@@ -200,15 +163,6 @@ def buscar_candidatos(ano: int, nome: str, uf: Optional[str] = None):
 
 @app.get("/candidato")
 def get_candidato(ano: int, numero: int, cargo: str, uf: Optional[str] = None):
-    """
-    Retorna dados gerais de um candidato e a distribuição de votos por município.
-
-    Parâmetros:
-      - ano    (int): 2018 ou 2022
-      - numero (int): número do candidato na urna
-      - cargo  (str): cargo disputado
-      - uf     (str, opcional): sigla do estado
-    """
     f = get_parquet(ano)
     where, params = build_where(numero=numero, cargo=cargo, uf=uf)
 
@@ -235,15 +189,6 @@ def get_candidato(ano: int, numero: int, cargo: str, uf: Optional[str] = None):
 
 @app.get("/candidato/municipios")
 def votos_por_municipio(ano: int, numero: int, cargo: str, uf: Optional[str] = None):
-    """
-    Retorna os votos de um candidato agrupados por município.
-
-    Parâmetros:
-      - ano    (int): 2018 ou 2022
-      - numero (int): número do candidato na urna
-      - cargo  (str): cargo disputado
-      - uf     (str, opcional): sigla do estado
-    """
     f = get_parquet(ano)
     where, params = build_where(numero=numero, cargo=cargo, uf=uf)
 
@@ -261,15 +206,6 @@ def votos_por_municipio(ano: int, numero: int, cargo: str, uf: Optional[str] = N
 
 @app.get("/candidato/secoes")
 def votos_por_secao(ano: int, numero: int, cargo: str, municipio: str):
-    """
-    Retorna os votos de um candidato por zona e seção eleitoral dentro de um município.
-
-    Parâmetros:
-      - ano       (int): 2018 ou 2022
-      - numero    (int): número do candidato na urna
-      - cargo     (str): cargo disputado
-      - municipio (str): nome exato do município, ex. "SALVADOR"
-    """
     f = get_parquet(ano)
     where, params = build_where(numero=numero, cargo=cargo, municipio=municipio)
 
@@ -287,16 +223,6 @@ def votos_por_secao(ano: int, numero: int, cargo: str, municipio: str):
 
 @app.get("/candidato/completo")
 def candidato_completo(ano: int, numero: int, cargo: str, uf: Optional[str] = None):
-    """
-    Retorna o conjunto completo de dados de um candidato:
-    metadados, totais gerais, votos por município, por zona e por seção.
-
-    Parâmetros:
-      - ano    (int): 2018 ou 2022
-      - numero (int): número do candidato na urna
-      - cargo  (str): cargo disputado
-      - uf     (str, opcional): sigla do estado
-    """
     f = get_parquet(ano)
     where, params = build_where(numero=numero, cargo=cargo, uf=uf)
 
@@ -345,7 +271,7 @@ def candidato_completo(ano: int, numero: int, cargo: str, uf: Optional[str] = No
         ORDER BY NM_MUNICIPIO, NR_ZONA, NR_SECAO
     """, params)
 
-    t = totais
+    tv = totais
     return {
         "eleicao": {
             "ano": meta["ANO_ELEICAO"], "cd_pleito": meta["CD_PLEITO"],
@@ -364,10 +290,10 @@ def candidato_completo(ano: int, numero: int, cargo: str, uf: Optional[str] = No
             "nome": meta["NM_PARTIDO"],
         },
         "totais": {
-            "votos": t["total_votos"] or 0, "aptos": t["total_aptos"] or 0,
-            "comparecimento": t["total_comparecimento"] or 0,
-            "abstencoes": t["total_abstencoes"] or 0,
-            "biometria_nh": t["total_biometria_nh"] or 0,
+            "votos": tv["total_votos"] or 0, "aptos": tv["total_aptos"] or 0,
+            "comparecimento": tv["total_comparecimento"] or 0,
+            "abstencoes": tv["total_abstencoes"] or 0,
+            "biometria_nh": tv["total_biometria_nh"] or 0,
         },
         "por_municipio": por_municipio,
         "por_zona": por_zona,
@@ -377,14 +303,6 @@ def candidato_completo(ano: int, numero: int, cargo: str, uf: Optional[str] = No
 
 @app.get("/municipio/candidatos")
 def candidatos_por_municipio(ano: int, municipio: str, cargo: str):
-    """
-    Lista todos os candidatos e seus votos em um município específico.
-
-    Parâmetros:
-      - ano       (int): 2018 ou 2022
-      - municipio (str): nome exato do município, ex. "SALVADOR"
-      - cargo     (str): cargo disputado
-    """
     f = get_parquet(ano)
     where, params = build_where(municipio=municipio, cargo=cargo)
 
