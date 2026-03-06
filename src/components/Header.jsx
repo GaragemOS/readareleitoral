@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useStore } from '../store';
 import { searchCandidates } from '../elections';
-import { Search, X, Star, BookOpen } from 'lucide-react';
+import { Search, X, Star, BookOpen, Wifi } from 'lucide-react';
 import './Header.css';
 
 const ANOS = [2022, 2018];
@@ -50,7 +50,7 @@ export default function Header() {
             {/* Left side: branding */}
             <div className="header-left">
                 <div className="header-brand">
-                    <div className="header-logo-mark" />
+                    <Wifi size={24} className="header-logo-icon" />
                     <div>
                         <h1 className="header-title">Radar Eleitoral</h1>
                         <span className="header-subtitle">Inteligência Eleitoral</span>

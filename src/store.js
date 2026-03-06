@@ -101,6 +101,69 @@ export const useStore = create((set, get) => ({
   rankingData: null,
   rankingLoading: false,
 
+  // ── Default Rankings (no candidate selected) ──────
+  defaultRankings: {},       // { [cargo]: [...candidates] }
+  defaultRankingsLoading: false,
+  defaultCargoTab: 'PRESIDENTE',
+  selectedDefaultUf: 'DF',
+
+  loadDefaultRankings: async () => {
+    const { ano, selectedDefaultUf } = get();
+    set({ defaultRankingsLoading: true });
+    const cargos = ['PRESIDENTE', 'GOVERNADOR', 'SENADOR', 'DEPUTADO FEDERAL', 'DEPUTADO ESTADUAL'];
+    const stateCargos = ['GOVERNADOR', 'DEPUTADO ESTADUAL'];
+    try {
+      const results = await Promise.all(cargos.map(c => fetchCandidatesList(c, ano)));
+      const rankings = {};
+
+      for (let i = 0; i < cargos.length; i++) {
+        const c = cargos[i];
+        const isStateCargo = stateCargos.includes(c);
+        let list = (results[i] || [])
+          .filter(cand => cand.nome && !cand.nome.includes('#NULO#') && cand.nome.toUpperCase() !== 'NULO' && cand.nome.toUpperCase() !== 'BRANCO');
+
+        // For state-level cargos, check if data belongs to the selected UF
+        if (isStateCargo && selectedDefaultUf && list.length > 0) {
+          // Detect actual state: load first candidate's data to check municipalities
+          try {
+            const firstCand = list[0];
+            const candData = await fetch(
+              `${import.meta.env.VITE_API_URL || 'https://readareleitoral-api.up.railway.app'}/candidato?numero=${firstCand.numero}&cargo=${encodeURIComponent(c)}&ano=${ano}`
+            ).then(r => r.json());
+
+            if (candData?.por_municipio?.length > 0) {
+              const muniName = candData.por_municipio
+                .sort((a, b) => b.total_votos - a.total_votos)[0]?.NM_MUNICIPIO;
+              if (muniName) {
+                const ibgeRes = await fetch(
+                  `https://servicodados.ibge.gov.br/api/v1/localidades/municipios?nome=${encodeURIComponent(muniName)}`
+                ).then(r => r.json());
+                const exact = ibgeRes.find(m => m.nome.toUpperCase() === muniName.toUpperCase());
+                const dataUf = (exact || ibgeRes[0])?.microrregiao?.mesorregiao?.UF?.sigla;
+                if (dataUf && dataUf !== selectedDefaultUf) {
+                  list = []; // Data doesn't belong to selected UF
+                }
+              }
+            }
+          } catch { /* detection failed, show data anyway */ }
+        }
+
+        rankings[c] = list.slice(0, 5);
+      }
+
+      set({ defaultRankings: rankings, defaultRankingsLoading: false });
+    } catch (e) {
+      console.error('Failed to load default rankings:', e);
+      set({ defaultRankingsLoading: false });
+    }
+  },
+
+  setDefaultCargoTab: (tab) => set({ defaultCargoTab: tab }),
+  setSelectedDefaultUf: (uf) => {
+    set({ selectedDefaultUf: uf });
+    get().loadDefaultRankings();
+  },
+
   // ── Comparison (multi) ─────────────────────────────
   compareCandidates: [],   // array of candidate objects
   compareData: {},         // { [numero]: cData }

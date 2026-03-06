@@ -113,12 +113,129 @@ export default function Sidebar() {
         setShowHistory(false);
     }, [addCompareCandidate]);
 
+    // ── Default rankings (no candidate) ───────────────
+    const defaultRankings = useStore(s => s.defaultRankings);
+    const defaultRankingsLoading = useStore(s => s.defaultRankingsLoading);
+    const defaultCargoTab = useStore(s => s.defaultCargoTab);
+    const setDefaultCargoTab = useStore(s => s.setDefaultCargoTab);
+    const loadDefaultRankings = useStore(s => s.loadDefaultRankings);
+    const loadCandidateByNumber = useStore(s => s.loadCandidateByNumber);
+    const selectedDefaultUf = useStore(s => s.selectedDefaultUf);
+    const setSelectedDefaultUf = useStore(s => s.setSelectedDefaultUf);
+
+    const UF_OPTIONS = [
+        { sigla: 'AC', nome: 'Acre' }, { sigla: 'AL', nome: 'Alagoas' }, { sigla: 'AP', nome: 'Amapá' },
+        { sigla: 'AM', nome: 'Amazonas' }, { sigla: 'BA', nome: 'Bahia' }, { sigla: 'CE', nome: 'Ceará' },
+        { sigla: 'DF', nome: 'Distrito Federal' }, { sigla: 'ES', nome: 'Espírito Santo' },
+        { sigla: 'GO', nome: 'Goiás' }, { sigla: 'MA', nome: 'Maranhão' }, { sigla: 'MT', nome: 'Mato Grosso' },
+        { sigla: 'MS', nome: 'Mato Grosso do Sul' }, { sigla: 'MG', nome: 'Minas Gerais' },
+        { sigla: 'PA', nome: 'Pará' }, { sigla: 'PB', nome: 'Paraíba' }, { sigla: 'PR', nome: 'Paraná' },
+        { sigla: 'PE', nome: 'Pernambuco' }, { sigla: 'PI', nome: 'Piauí' }, { sigla: 'RJ', nome: 'Rio de Janeiro' },
+        { sigla: 'RN', nome: 'Rio Grande do Norte' }, { sigla: 'RS', nome: 'Rio Grande do Sul' },
+        { sigla: 'RO', nome: 'Rondônia' }, { sigla: 'RR', nome: 'Roraima' }, { sigla: 'SC', nome: 'Santa Catarina' },
+        { sigla: 'SP', nome: 'São Paulo' }, { sigla: 'SE', nome: 'Sergipe' }, { sigla: 'TO', nome: 'Tocantins' },
+    ];
+
+    const DEFAULT_CARGOS = [
+        { key: 'PRESIDENTE', label: 'Presidente' },
+        { key: 'GOVERNADOR', label: 'Governador' },
+        { key: 'SENADOR', label: 'Senador' },
+        { key: 'DEPUTADO FEDERAL', label: 'Dep. Federal' },
+        { key: 'DEPUTADO ESTADUAL', label: 'Dep. Estadual' },
+    ];
+
+    const isStateLevelTab = defaultCargoTab === 'GOVERNADOR' || defaultCargoTab === 'DEPUTADO ESTADUAL';
+
+    // Load default rankings on mount and year change
+    useEffect(() => {
+        if (favorites.length === 0) loadDefaultRankings();
+    }, [ano, favorites.length]);
+
+    const handleDefaultCandidateClick = useCallback((candidate, cargo) => {
+        if (!activeFav) {
+            // No primary selected → load as primary
+            loadCandidateByNumber(candidate.numero, cargo);
+        } else if (activeFav.cargo === cargo) {
+            // Same cargo as primary → add to comparison
+            addCompareCandidate({ ...candidate, cargo });
+        } else {
+            // Different cargo → load as new primary
+            loadCandidateByNumber(candidate.numero, cargo);
+        }
+    }, [activeFav, loadCandidateByNumber, addCompareCandidate]);
+
     if (!activeFav) {
+        const cargoList = defaultRankings[defaultCargoTab] || [];
         return (
             <div className="sidebar">
-                <div className="sidebar-empty">
-                    <p>Selecione um candidato para ver os dados.</p>
+                <div className="sidebar-default-header">
+                    <Trophy size={18} />
+                    <h3>Ranking Geral — {ano}</h3>
                 </div>
+
+                {/* Cargo tabs */}
+                <div className="sidebar-cargo-tabs">
+                    {DEFAULT_CARGOS.map(c => (
+                        <button
+                            key={c.key}
+                            className={`sidebar-cargo-tab ${defaultCargoTab === c.key ? 'active' : ''}`}
+                            onClick={() => setDefaultCargoTab(c.key)}
+                        >
+                            {c.label}
+                        </button>
+                    ))}
+                </div>
+
+                {/* UF selector for state-level cargos */}
+                {isStateLevelTab && (
+                    <div className="sidebar-uf-selector">
+                        <MapPin size={12} />
+                        <select
+                            className="sidebar-uf-select"
+                            value={selectedDefaultUf}
+                            onChange={e => setSelectedDefaultUf(e.target.value)}
+                        >
+                            {UF_OPTIONS.map(uf => (
+                                <option key={uf.sigla} value={uf.sigla}>{uf.nome}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+
+                {/* Rankings list */}
+                <div className="sidebar-default-list">
+                    {defaultRankingsLoading && (
+                        <div className="sidebar-loading">Carregando ranking...</div>
+                    )}
+                    {!defaultRankingsLoading && cargoList.length === 0 && (
+                        <div className="sidebar-loading">Não tem dados disponíveis no momento</div>
+                    )}
+                    {cargoList.map((c, i) => {
+                        const nome = c.nome?.split(' ')
+                            .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+                            .join(' ');
+                        return (
+                            <button
+                                key={c.numero}
+                                className="sidebar-default-item"
+                                onClick={() => handleDefaultCandidateClick(c, defaultCargoTab)}
+                            >
+                                <span className="sidebar-default-pos">{i + 1}º</span>
+                                <div className="sidebar-default-info">
+                                    <span className="sidebar-default-name">{nome}</span>
+                                    <span className="sidebar-default-partido">{c.partido}</span>
+                                </div>
+                                <span className="sidebar-default-votes">
+                                    {c.total_votos?.toLocaleString('pt-BR')}
+                                </span>
+                            </button>
+                        );
+                    })}
+                </div>
+
+                <p className="sidebar-default-hint">
+                    Clique em um candidato para ver seus dados detalhados
+                </p>
             </div>
         );
     }
@@ -188,25 +305,30 @@ export default function Sidebar() {
                         {isComparing ? 'Comparativo' : `Ranking — ${activeFav.cargo}`}
                     </h3>
                     <div className="sidebar-ranking-list">
-                        {comparativeRanking.map(c => (
-                            <div
-                                key={c.numero}
-                                className={`sidebar-ranking-item ${c.isActive ? 'active' : ''}`}
-                                style={c.colorIdx >= 0 ? { borderLeft: `3px solid ${CANDIDATE_COLORS[c.colorIdx]}` } : {}}
-                            >
-                                <span className="sidebar-ranking-pos">{c.position}º</span>
-                                <div className="sidebar-ranking-info">
-                                    <span className="sidebar-ranking-name">{c.nome}</span>
-                                    <span className="sidebar-ranking-partido">{c.partido}</span>
-                                </div>
-                                <span
-                                    className="sidebar-ranking-votes"
-                                    style={c.colorIdx >= 0 ? { color: CANDIDATE_COLORS[c.colorIdx] } : {}}
+                        {comparativeRanking.map(c => {
+                            const canCompare = !isComparing && !c.isActive && c.numero !== activeFav.numero;
+                            const Tag = canCompare ? 'button' : 'div';
+                            return (
+                                <Tag
+                                    key={c.numero}
+                                    className={`sidebar-ranking-item ${c.isActive ? 'active' : ''} ${canCompare ? 'clickable' : ''}`}
+                                    style={c.colorIdx >= 0 ? { borderLeft: `3px solid ${CANDIDATE_COLORS[c.colorIdx]}` } : {}}
+                                    {...(canCompare ? { onClick: () => addCompareCandidate({ ...c, cargo: activeFav.cargo }) } : {})}
+                                    {...(canCompare ? { title: 'Clique para comparar' } : {})}
                                 >
-                                    {c.total_votos?.toLocaleString('pt-BR')}
-                                </span>
-                            </div>
-                        ))}
+                                    <span className="sidebar-ranking-pos">{c.position}º</span>
+                                    <div className="sidebar-ranking-info">
+                                        <span className="sidebar-ranking-name">{c.nome}</span>
+                                        <span className="sidebar-ranking-partido">{c.partido}</span>
+                                    </div>
+                                    <span
+                                        className="sidebar-ranking-votes"
+                                        style={c.colorIdx >= 0 ? { color: CANDIDATE_COLORS[c.colorIdx] } : {}}
+                                    >
+                                        {c.total_votos?.toLocaleString('pt-BR')}
+                                    </span>
+                                </Tag>);
+                        })}
                     </div>
                 </div>
             )}

@@ -264,17 +264,6 @@ function MapView() {
             onMouseLeave={handleMouseUp}
             style={{ cursor: selectedUf && scaleRef.current > 1 ? (isDraggingRef.current ? 'grabbing' : 'grab') : 'default' }}
         >
-            {!hasFavorites && (
-                <div className="map-empty-overlay">
-                    <div className="map-empty-content">
-                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--cor-secundaria)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                            <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-                        </svg>
-                        <h3>Busque um candidato</h3>
-                        <p>Use a barra de busca acima para encontrar e carregar dados eleitorais.</p>
-                    </div>
-                </div>
-            )}
 
             {selectedUf && (
                 <button className="map-back-btn" onClick={handleBack}>← Voltar ao Brasil</button>

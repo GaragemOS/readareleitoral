@@ -26,6 +26,143 @@
     font-size: 13px;
 }
 
+/* Default rankings header */
+.sidebar-default-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--cor-secundaria);
+}
+
+.sidebar-default-header h3 {
+    font-size: 16px;
+    font-weight: 700;
+}
+
+/* Cargo tabs */
+.sidebar-cargo-tabs {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.sidebar-cargo-tab {
+    padding: 6px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: var(--radius-full);
+    background: var(--bg-page);
+    color: var(--texto-muted);
+    transition: all var(--transition);
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.sidebar-cargo-tab.active {
+    background: var(--cor-secundaria);
+    color: #fff;
+}
+
+.sidebar-cargo-tab:hover:not(.active) {
+    background: var(--border);
+    color: var(--texto-cor);
+}
+
+/* UF selector */
+.sidebar-uf-selector {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--texto-muted);
+}
+
+.sidebar-uf-select {
+    flex: 1;
+    padding: 8px 12px;
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--texto-cor);
+    cursor: pointer;
+    transition: border-color var(--transition);
+}
+
+.sidebar-uf-select:focus {
+    border-color: var(--cor-secundaria);
+    outline: none;
+}
+
+/* Default rankings list */
+.sidebar-default-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.sidebar-default-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    cursor: pointer;
+    transition: all var(--transition);
+    text-align: left;
+    width: 100%;
+}
+
+.sidebar-default-item:hover {
+    background: var(--bg-page);
+}
+
+.sidebar-default-pos {
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--cor-secundaria);
+    min-width: 30px;
+}
+
+.sidebar-default-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+}
+
+.sidebar-default-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--texto-cor);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sidebar-default-partido {
+    font-size: 10px;
+    color: var(--texto-muted);
+    font-weight: 500;
+}
+
+.sidebar-default-votes {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--cor-secundaria);
+    white-space: nowrap;
+}
+
+.sidebar-default-hint {
+    text-align: center;
+    font-size: 11px;
+    color: var(--texto-muted);
+    margin-top: auto;
+    padding: 8px;
+}
+
 .sidebar-no-data {
     background: var(--bg-page);
     border-radius: var(--radius-sm);
@@ -168,6 +305,17 @@
 
 .sidebar-ranking-item:not(.active) {
     background: var(--bg-page);
+}
+
+.sidebar-ranking-item.clickable {
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+}
+
+.sidebar-ranking-item.clickable:hover {
+    background: var(--border);
+    transform: translateX(2px);
 }
 
 .sidebar-ranking-pos {

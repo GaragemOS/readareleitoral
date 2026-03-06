@@ -56,6 +56,11 @@
   box-sizing: border-box;
 }
 
+.header-brand div {
+  display: flex;
+  flex-direction: column;
+}
+
 body {
   font-family: 'Poppins', sans-serif;
   background-color: var(--bg-page);
@@ -86,7 +91,8 @@ button {
   font-family: inherit;
 }
 
-input, select {
+input,
+select {
   font-family: inherit;
   border: none;
   outline: none;
@@ -97,13 +103,16 @@ input, select {
 ::-webkit-scrollbar {
   width: 6px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 3px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: var(--texto-muted);
 }

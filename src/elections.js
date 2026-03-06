@@ -16,10 +16,10 @@ export const fetchCandidateByNumber = async (numero, cargo, ano = 2022) => {
   }
 };
 
-export const fetchCandidatesList = async (cargo, ano = 2022) => {
+export const fetchCandidatesList = async (cargo, ano = 2022, extraParams = '') => {
   try {
     const res = await fetch(
-      `${API_URL}/candidatos/lista?cargo=${encodeURIComponent(cargo)}&ano=${ano}`
+      `${API_URL}/candidatos/lista?cargo=${encodeURIComponent(cargo)}&ano=${ano}${extraParams}`
     );
     if (!res.ok) throw new Error('Erro ao listar candidatos');
     return await res.json();
