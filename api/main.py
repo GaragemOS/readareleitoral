@@ -3,6 +3,11 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 import duckdb
+import json
+from pathlib import Path
+from functools import lru_cache
+from typing import Optional, Literal
+
 app = FastAPI()
 
 
@@ -312,10 +317,235 @@ def candidatos_por_municipio(ano: int, municipio: str, cargo: str):
     """, params)
 
 
+# ── Dados Censo IBGE  ────────────────────────────────────────────────────────────────────
+
+
+
+
+CENSO_PATH = "censo2022_brasil.json"
+
+@lru_cache(maxsize=1)
+def carregar_censo() -> dict:
+    path = Path(CENSO_PATH)
+    if not path.exists():
+        raise RuntimeError(f"Arquivo não encontrado: {CENSO_PATH}")
+    with open(path, encoding="utf-8") as f:
+        lista = json.load(f)
+    por_id = {m["id"]: m for m in lista}
+    por_uf = {}
+    for m in lista:
+        uf = m.get("uf_sigla", "").upper()
+        por_uf.setdefault(uf, []).append(m)
+    return {"lista": lista, "por_id": por_id, "por_uf": por_uf}
+
+
+def pop_municipio(m: dict):
+    """populacao_total vem null do censo — usa raca.Total como fallback."""
+    return m.get("populacao_total") or (m.get("raca") or {}).get("Total")
+
+
+def resumo(m: dict) -> dict:
+    return {
+        "id":              m["id"],
+        "municipio":       m["municipio"],
+        "uf_sigla":        m.get("uf_sigla", ""),
+        "uf_nome":         m.get("uf_nome", ""),
+        "microrregiao":    m.get("microrregiao", ""),
+        "mesorregiao":     m.get("mesorregiao", ""),
+        "populacao_total": pop_municipio(m),
+    }
+
+
+def valor_metrica(m: dict, metrica: str) -> Optional[float]:
+    if metrica == "populacao":
+        return pop_municipio(m)
+    if metrica == "renda_media":
+        return (m.get("renda") or {}).get("renda_media_rs")
+    if metrica == "tx_alfabetizacao":
+        alfa = m.get("alfabetizacao") or {}
+        vals = [v for v in alfa.values() if isinstance(v, (int, float))]
+        return round(sum(vals) / len(vals), 2) if vals else None
+    if metrica == "domicilios":
+        return (m.get("domicilios") or {}).get("total")
+    if metrica == "pct_parda":
+        raca = m.get("raca") or {}
+        total = raca.get("Total") or 0
+        return round(raca.get("Parda", 0) / total * 100, 2) if total else None
+    if metrica == "pct_branca":
+        raca = m.get("raca") or {}
+        total = raca.get("Total") or 0
+        return round(raca.get("Branca", 0) / total * 100, 2) if total else None
+    if metrica == "pct_preta":
+        raca = m.get("raca") or {}
+        total = raca.get("Total") or 0
+        return round(raca.get("Preta", 0) / total * 100, 2) if total else None
+    if metrica == "pct_indigena":
+        raca = m.get("raca") or {}
+        total = raca.get("Total") or 0
+        return round(raca.get("Indígena", 0) / total * 100, 2) if total else None
+    return None
+
+
+MetricaRanking = Literal[
+    "populacao", "renda_media", "tx_alfabetizacao",
+    "domicilios", "pct_parda", "pct_branca", "pct_preta", "pct_indigena"
+]
+
+
+@app.get("/ibge/municipios", tags=["IBGE"])
+def listar_municipios(uf: Optional[str] = None, limit: int = 100, offset: int = 0):
+    """Lista todos os municípios (versão resumida). Filtrável por UF."""
+    censo = carregar_censo()
+    lista = censo["por_uf"].get(uf.upper(), []) if uf else censo["lista"]
+    return {
+        "total":      len(lista),
+        "limit":      limit,
+        "offset":     offset,
+        "municipios": [resumo(m) for m in lista[offset: offset + limit]],
+    }
+
+
+@app.get("/ibge/municipio/busca", tags=["IBGE"])
+def buscar_municipio(nome: str, uf: Optional[str] = None):
+    """Busca municípios por nome (parcial, case-insensitive)."""
+    censo  = carregar_censo()
+    busca  = nome.strip().upper()
+    lista  = censo["por_uf"].get(uf.upper(), censo["lista"]) if uf else censo["lista"]
+    resultado = [resumo(m) for m in lista if busca in m["municipio"].upper()]
+    if not resultado:
+        raise HTTPException(status_code=404, detail="Nenhum município encontrado.")
+    return resultado
+
+
+@app.get("/ibge/municipio/{municipio_id}", tags=["IBGE"])
+def get_municipio(municipio_id: int):
+    """Retorna todos os dados censitários de um município pelo ID do IBGE."""
+    censo = carregar_censo()
+    m = censo["por_id"].get(municipio_id)
+    if not m:
+        raise HTTPException(status_code=404, detail=f"Município {municipio_id} não encontrado.")
+    return m
+
+
+@app.get("/ibge/uf/{uf}", tags=["IBGE"])
+def get_uf(uf: str):
+    """Retorna todos os municípios de uma UF (versão resumida)."""
+    censo = carregar_censo()
+    lista = censo["por_uf"].get(uf.upper())
+    if not lista:
+        raise HTTPException(status_code=404, detail=f"UF '{uf}' não encontrada.")
+    return {
+        "uf_sigla":         uf.upper(),
+        "uf_nome":          lista[0].get("uf_nome", ""),
+        "total_municipios": len(lista),
+        "populacao_total":  sum(pop_municipio(m) or 0 for m in lista),
+        "municipios":       [resumo(m) for m in lista],
+    }
+
+
+@app.get("/ibge/uf/{uf}/ranking", tags=["IBGE"])
+def ranking_uf(
+    uf: str,
+    metrica: MetricaRanking = "populacao",
+    ordem: Literal["desc", "asc"] = "desc",
+    limit: int = 20,
+):
+    censo = carregar_censo()
+    lista = censo["por_uf"].get(uf.upper())
+    if not lista:
+        raise HTTPException(status_code=404, detail=f"UF '{uf}' não encontrada.")
+    com_valor = [
+        {**resumo(m), "valor": valor_metrica(m, metrica)}
+        for m in lista
+    ]
+    com_valor = sorted(
+        [r for r in com_valor if r["valor"] is not None],
+        key=lambda x: x["valor"], reverse=(ordem == "desc")
+    )
+    return {"uf_sigla": uf.upper(), "metrica": metrica, "ordem": ordem,
+            "total": len(com_valor), "ranking": com_valor[:limit]}
+
+
+@app.get("/ibge/brasil/ranking", tags=["IBGE"])
+def ranking_brasil(
+    metrica: MetricaRanking = "populacao",
+    ordem: Literal["desc", "asc"] = "desc",
+    uf: Optional[str] = None,
+    limit: int = 20,
+):
+    censo = carregar_censo()
+    lista = censo["por_uf"].get(uf.upper(), censo["lista"]) if uf else censo["lista"]
+    com_valor = [
+        {**resumo(m), "valor": valor_metrica(m, metrica)}
+        for m in lista
+    ]
+    com_valor = sorted(
+        [r for r in com_valor if r["valor"] is not None],
+        key=lambda x: x["valor"], reverse=(ordem == "desc")
+    )
+    return {"metrica": metrica, "ordem": ordem, "uf": uf,
+            "total": len(com_valor), "ranking": com_valor[:limit]}
+
+
+@app.get("/ibge/brasil/resumo", tags=["IBGE"])
+def resumo_brasil():
+    """Totais e médias agregadas do Brasil."""
+    censo  = carregar_censo()
+    lista  = censo["lista"]
+    rendas = [r for m in lista if (r := valor_metrica(m, "renda_media")) is not None]
+    alfas  = [r for m in lista if (r := valor_metrica(m, "tx_alfabetizacao")) is not None]
+    racas: dict = {}
+    for m in lista:
+        for k, v in (m.get("raca") or {}).items():
+            if isinstance(v, (int, float)):
+                racas[k] = racas.get(k, 0) + v
+    return {
+        "total_municipios":   len(lista),
+        "populacao_total":    sum(pop_municipio(m) or 0 for m in lista),
+        "renda_media_brasil": round(sum(rendas) / len(rendas), 2) if rendas else None,
+        "tx_alfa_media":      round(sum(alfas)  / len(alfas),  2) if alfas  else None,
+        "populacao_por_raca": racas,
+    }
+
+
 
 
 # ── Todos Endpoints Disponíveis  ──────────────────────────────────────────────────────────
 
+# Lista todos os municípios (paginado)
+# GET http://localhost:8000/ibge/municipios
+# GET http://localhost:8000/ibge/municipios?uf=BA
+# GET http://localhost:8000/ibge/municipios?uf=SP&limit=50&offset=0
+
+# Busca por nome (parcial)
+# GET http://localhost:8000/ibge/municipio/busca?nome=salvador
+# GET http://localhost:8000/ibge/municipio/busca?nome=feira&uf=BA
+# GET http://localhost:8000/ibge/municipio/busca?nome=sao
+
+# Dados completos de 1 município pelo ID do IBGE
+# GET http://localhost:8000/ibge/municipio/2927408    ← Salvador
+# GET http://localhost:8000/ibge/municipio/2910800    ← Feira de Santana
+# GET http://localhost:8000/ibge/municipio/3550308    ← São Paulo
+# GET http://localhost:8000/ibge/municipio/3304557    ← Rio de Janeiro
+
+# Todos os municípios de uma UF
+# GET http://localhost:8000/ibge/uf/BA
+# GET http://localhost:8000/ibge/uf/SP
+# GET http://localhost:8000/ibge/uf/MG
+
+# Ranking dentro de uma UF
+# GET http://localhost:8000/ibge/uf/BA/ranking?metrica=populacao
+# GET http://localhost:8000/ibge/uf/BA/ranking?metrica=renda_media&ordem=desc&limit=10
+# GET http://localhost:8000/ibge/uf/BA/ranking?metrica=tx_alfabetizacao&ordem=asc
+# GET http://localhost:8000/ibge/uf/SP/ranking?metrica=pct_parda&limit=5
+# GET http://localhost:8000/ibge/uf/AM/ranking?metrica=pct_indigena
+
+# Ranking nacional
+# GET http://localhost:8000/ibge/brasil/ranking?metrica=populacao
+# GET http://localhost:8000/ibge/brasil/ranking?metrica=renda_media&limit=10
+# GET http://localhost:8000/ibge/brasil/ranking?metrica=renda_media&ordem=asc&limit=20  ← mais pobres
+# GET http://localhost:8000/ibge/brasil/ranking?metrica=tx_alfabetizacao&ordem=asc      ← menor alfabetização
+# GET http://localhost:8000/ibge/brasil/ranking?metrica=populacao&uf=BA                 ← ranking só na BA
 # GET cargos
 # /debug/cargos?ano=2022
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useStore, CANDIDATE_COLORS } from '../store';
 import { searchCandidates } from '../elections';
+import { getMuniData } from '../utils';
 import { Search, X, MapPin, Trophy, BarChart3, FileDown, Grid3x3, Clock } from 'lucide-react';
 import PieChart from './PieChart';
 import './Sidebar.css';
@@ -29,7 +30,8 @@ export default function Sidebar() {
 
     const activeFav = favorites[activeFavoriteIndex];
     const hasData = apiData[activeFavoriteIndex] != null;
-    const data = selectedMunicipality ? municipalData[selectedMunicipality] : null;
+    // ── Use normalized lookup so accented IBGE names match API keys ──
+    const data = selectedMunicipality ? getMuniData(municipalData, selectedMunicipality) : null;
     const currentVotes = data?.votes?.[activeFavoriteIndex] || 0;
     const isComparing = compareCandidates.length > 0;
 
@@ -88,7 +90,6 @@ export default function Sidebar() {
                 ? results.filter(c => c.cargo === activeFav.cargo && c.numero !== activeFav.numero)
                 : results;
 
-            // Prioritize history candidates
             const historyNums = (history || []).map(h => h.numero);
             const sorted = [...filtered].sort((a, b) => {
                 const aInHistory = historyNums.includes(a.numero) ? 0 : 1;
@@ -146,20 +147,16 @@ export default function Sidebar() {
 
     const isStateLevelTab = defaultCargoTab === 'GOVERNADOR' || defaultCargoTab === 'DEPUTADO ESTADUAL';
 
-    // Load default rankings on mount and year change
     useEffect(() => {
         if (favorites.length === 0) loadDefaultRankings();
     }, [ano, favorites.length]);
 
     const handleDefaultCandidateClick = useCallback((candidate, cargo) => {
         if (!activeFav) {
-            // No primary selected → load as primary
             loadCandidateByNumber(candidate.numero, cargo);
         } else if (activeFav.cargo === cargo) {
-            // Same cargo as primary → add to comparison
             addCompareCandidate({ ...candidate, cargo });
         } else {
-            // Different cargo → load as new primary
             loadCandidateByNumber(candidate.numero, cargo);
         }
     }, [activeFav, loadCandidateByNumber, addCompareCandidate]);
@@ -173,7 +170,6 @@ export default function Sidebar() {
                     <h3>Ranking Geral — {ano}</h3>
                 </div>
 
-                {/* Cargo tabs */}
                 <div className="sidebar-cargo-tabs">
                     {DEFAULT_CARGOS.map(c => (
                         <button
@@ -186,7 +182,6 @@ export default function Sidebar() {
                     ))}
                 </div>
 
-                {/* UF selector for state-level cargos */}
                 {isStateLevelTab && (
                     <div className="sidebar-uf-selector">
                         <MapPin size={12} />
@@ -202,7 +197,6 @@ export default function Sidebar() {
                     </div>
                 )}
 
-                {/* Rankings list */}
                 <div className="sidebar-default-list">
                     {defaultRankingsLoading && (
                         <div className="sidebar-loading">Carregando ranking...</div>
@@ -265,19 +259,16 @@ export default function Sidebar() {
                 </div>
             </div>
 
-            {/* Loading */}
             {isLoading && (
                 <div className="sidebar-no-data">Carregando dados de {ano}...</div>
             )}
 
-            {/* No data for this year */}
             {!isLoading && !hasData && (
                 <div className="sidebar-no-data">
                     Sem dados disponíveis para {ano}.
                 </div>
             )}
 
-            {/* Stats */}
             <div className="sidebar-stats">
                 {selectedMunicipality && (
                     <div className="sidebar-stat-card">
@@ -297,7 +288,6 @@ export default function Sidebar() {
                 )}
             </div>
 
-            {/* Ranking / Comparative */}
             {!rankingLoading && comparativeRanking.length > 0 && (
                 <div className="sidebar-section">
                     <h3 className="sidebar-section-title">
@@ -334,7 +324,6 @@ export default function Sidebar() {
             )}
             {rankingLoading && <div className="sidebar-loading">Carregando ranking...</div>}
 
-            {/* Pie Chart (comparison mode) */}
             {isComparing && rankingData && (() => {
                 const pieData = [];
                 const activeFavRank = rankingData.find(c => c.numero === activeFav.numero);
@@ -351,14 +340,12 @@ export default function Sidebar() {
                 ) : null;
             })()}
 
-            {/* Compare section */}
             <div className="sidebar-section">
                 <h3 className="sidebar-section-title">
                     <Search size={14} />
                     Comparar com
                 </h3>
 
-                {/* Active comparisons */}
                 {compareCandidates.length > 0 && (
                     <div className="sidebar-compare-chips">
                         {compareCandidates.map((comp, i) => (
@@ -378,7 +365,6 @@ export default function Sidebar() {
                     </div>
                 )}
 
-                {/* Compare history */}
                 {history.length > 0 && !compareSearch && (
                     <div className="sidebar-history">
                         <span className="sidebar-history-label"><Clock size={10} /> Recentes</span>
@@ -397,7 +383,6 @@ export default function Sidebar() {
                     </div>
                 )}
 
-                {/* Search for more */}
                 <div className="sidebar-compare-search-wrapper">
                     <input
                         type="text"
@@ -429,7 +414,6 @@ export default function Sidebar() {
                 </div>
             </div>
 
-            {/* Seções button */}
             {selectedMunicipality && (
                 <button className="sidebar-secoes-btn" onClick={openSecoesModal}>
                     <Grid3x3 size={14} />
@@ -437,7 +421,6 @@ export default function Sidebar() {
                 </button>
             )}
 
-            {/* Export button */}
             <button className="sidebar-export-btn" onClick={openExport}>
                 <FileDown size={14} />
                 {isComparing ? 'Comparar dados completos' : 'Ver dados completos'}

@@ -25,6 +25,10 @@ const UF_IBGE_CODE = {
     SP: 35, SE: 28, TO: 17
 };
 
+// Remove accents and normalize for consistent name matching
+const normalizeName = (s) =>
+    s?.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim() || '';
+
 function MapView() {
     const favorites = useStore(s => s.favorites);
     const activeFavoriteIndex = useStore(s => s.activeFavoriteIndex);
@@ -41,6 +45,8 @@ function MapView() {
     const [muniFeatures, setMuniFeatures] = useState(null);
     const [loadingMuni, setLoadingMuni] = useState(false);
     const [hoveredGeo, setHoveredGeo] = useState(null);
+    // Fade-in control: false = invisible, true = visible
+    const [muniVisible, setMuniVisible] = useState(false);
 
     // ── Optimized zoom via ref (no React re-renders) ──
     const svgRef = useRef(null);
@@ -88,7 +94,7 @@ function MapView() {
         const lookup = {};
         Object.entries(municipalData).forEach(([mName, mData]) => {
             const v = mData.votes?.[activeFavoriteIndex] || 0;
-            if (v > 0) lookup[mName.toUpperCase()] = v;
+            if (v > 0) lookup[normalizeName(mName)] = v;
         });
         const vals = Object.values(lookup).filter(v => v > 0);
         const maxV = vals.length > 0 ? Math.max(...vals) : 1;
@@ -108,7 +114,7 @@ function MapView() {
     // ── Get color for a municipality ──────────────────
     const getMuniColor = useCallback((nomeMuni) => {
         if (!isComparing) {
-            const v = muniLookup[nomeMuni.toUpperCase()] || 0;
+            const v = muniLookup[normalizeName(nomeMuni)] || 0;
             return v > 0 ? muniColorScale(v) : '#e8f5f3';
         }
         const favVotes = municipalData[nomeMuni]?.votes?.[activeFavoriteIndex] || 0;
@@ -126,7 +132,7 @@ function MapView() {
     useEffect(() => {
         if (!selectedUf) {
             setMuniFeatures(null);
-            // Reset zoom
+            setMuniVisible(false);
             scaleRef.current = 1;
             panRef.current = { x: 0, y: 0 };
             if (svgRef.current) svgRef.current.style.transform = '';
@@ -135,6 +141,7 @@ function MapView() {
         const ibgeCode = UF_IBGE_CODE[selectedUf];
         if (!ibgeCode) return;
         setLoadingMuni(true);
+        setMuniVisible(false); // hide while loading
 
         const geoUrl = `${IBGE_MUNI_BASE}/${ibgeCode}?intrarregiao=municipio&formato=application/vnd.geo+json`;
         const namesUrl = `https://servicodados.ibge.gov.br/api/v1/localidades/estados/${ibgeCode}/municipios`;
@@ -156,6 +163,8 @@ function MapView() {
             });
             setMuniFeatures(features);
             setLoadingMuni(false);
+            // Small delay so browser paints the SVG before fading in
+            requestAnimationFrame(() => setTimeout(() => setMuniVisible(true), 40));
         }).catch(err => {
             console.error('Erro ao carregar municípios:', err);
             setLoadingMuni(false);
@@ -181,7 +190,7 @@ function MapView() {
     // ── Tooltip ───────────────────────────────────────
     const buildTooltipContent = useCallback((label, nomeMuni) => {
         if (!isComparing) {
-            const v = muniLookup[nomeMuni?.toUpperCase?.()] || 0;
+            const v = muniLookup[normalizeName(nomeMuni)] || 0;
             return `${label} — ${v.toLocaleString('pt-BR')} votos`;
         }
         const favVotes = municipalData[nomeMuni]?.votes?.[activeFavoriteIndex] || 0;
@@ -264,7 +273,6 @@ function MapView() {
             onMouseLeave={handleMouseUp}
             style={{ cursor: selectedUf && scaleRef.current > 1 ? (isDraggingRef.current ? 'grabbing' : 'grab') : 'default' }}
         >
-
             {selectedUf && (
                 <button className="map-back-btn" onClick={handleBack}>← Voltar ao Brasil</button>
             )}
@@ -279,7 +287,15 @@ function MapView() {
             {loadingMuni && <div className="map-loading">Carregando municípios...</div>}
 
             {selectedUf && muniFeatures && muniPathGen ? (
-                <svg ref={svgRef} viewBox="0 0 700 600" className="map-svg-muni">
+                <svg
+                    ref={svgRef}
+                    viewBox="0 0 700 600"
+                    className="map-svg-muni"
+                    style={{
+                        opacity: muniVisible ? 1 : 0,
+                        transition: 'opacity 0.4s ease',
+                    }}
+                >
                     <g>
                         {muniFeatures.map((feature, idx) => {
                             const nomeMuni = feature.properties?.nome || `Município ${idx + 1}`;
@@ -294,7 +310,10 @@ function MapView() {
                                     fill={isHovered ? '#14b8a6' : fillColor}
                                     stroke={isHovered ? '#0d9488' : '#94a3b8'}
                                     strokeWidth={isHovered ? 2 : 0.5}
-                                    style={{ cursor: 'pointer', transition: 'fill 0.1s' }}
+                                    style={{
+                                        cursor: 'pointer',
+                                        transition: 'fill 0.5s ease, stroke 0.2s ease, stroke-width 0.15s ease',
+                                    }}
                                     onMouseEnter={(evt) => { setHoveredGeo(idx); handleMouseEnter(nomeMuni, nomeMuni, evt); }}
                                     onMouseMove={handleMouseMove}
                                     onMouseLeave={handleMouseLeave}
@@ -324,7 +343,18 @@ function MapView() {
                                         fill={isHovered ? '#14b8a6' : (valor > 0 ? stateColorScale(valor) : '#E6F7F7')}
                                         stroke={isHovered ? '#0d9488' : '#cbd5e1'}
                                         strokeWidth={isHovered ? 1.5 : 0.6}
-                                        style={{ default: { outline: 'none' }, hover: { outline: 'none', cursor: 'pointer' }, pressed: { outline: 'none' } }}
+                                        style={{
+                                            default: {
+                                                outline: 'none',
+                                                transition: 'fill 0.5s ease',
+                                            },
+                                            hover: {
+                                                outline: 'none',
+                                                cursor: 'pointer',
+                                                transition: 'fill 0.15s ease',
+                                            },
+                                            pressed: { outline: 'none' },
+                                        }}
                                         onMouseEnter={(evt) => {
                                             setHoveredGeo(uf);
                                             setTooltip({ show: true, content: `${UF_NAMES[uf] || uf} — ${valor.toLocaleString('pt-BR')} votos`, x: evt.clientX, y: evt.clientY });
@@ -368,7 +398,6 @@ function MapView() {
                 </div>
             )}
 
-            {/* Ver tudo button */}
             {hasFavorites && (
                 <button className="map-vertudo-btn" onClick={openExport}>
                     {isComparing ? '📊 Ver tudo' : '📊 Ver tudo'}
